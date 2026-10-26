@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AI 주차 안내 시스템 · 운전자 체험</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E2E5E8; --panel:#F6F7F8; --ink:#1C2126; --muted:#56606A; --line:#C8CDD2; --chip:#EBEDEF;
+  --paint:#F0BE2C; --route:#3B7BF0; --go:#1F9D57; --stop:#D63B40; --off:#59626B;
+  --bezel:#1A1E23; --screen:#242A31; --screen2:#2F363E; --sink:#E9EDF0; --smuted:#A3ADB6;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#14171A; --panel:#1D2125; --ink:#E5E8EB; --muted:#9AA3AC; --line:#323940; --chip:#262B30;
+    --bezel:#0F1215; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14171A; --panel:#1D2125; --ink:#E5E8EB; --muted:#9AA3AC; --line:#323940; --chip:#262B30;
+  --bezel:#0F1215; color-scheme:dark;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;
+  font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+header{max-width:1320px;margin:0 auto;padding:22px 20px 6px;display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline;justify-content:space-between}
+header h1{font-size:22px;font-weight:700;margin:0;letter-spacing:-.01em}
+header p{margin:0;color:var(--muted);font-size:14px;max-width:62ch}
+.app{max-width:1320px;margin:0 auto;padding:14px 20px 40px;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(320px,1fr);gap:20px;align-items:start}
+@media (max-width:940px){.app{grid-template-columns:minmax(0,1fr)}}
+
+/* 차량 내비 화면 */
+.dash{background:var(--bezel);border-radius:26px;padding:12px;box-shadow:0 14px 34px rgba(0,0,0,.22)}
+.screen{background:var(--screen);color:var(--sink);border-radius:16px;overflow:hidden}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 16px;border-bottom:1px solid #353D46;font-size:13px;color:var(--smuted)}
+.topbar b{color:var(--sink);font-weight:600}
+.steps{display:flex;gap:4px;list-style:none;margin:0;padding:10px 16px 0;overflow-x:auto}
+.steps li{flex:1 0 auto;font-size:12.5px;color:var(--smuted);padding:4px 2px 8px;border-bottom:3px solid #3A424B;white-space:nowrap}
+.steps li.done{color:#C9D1D8;border-color:#6B757F}
+.steps li.now{color:var(--paint);border-color:var(--paint);font-weight:600}
+.banner{margin:10px 16px 0;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:600;display:none}
+.banner.risk{display:block;background:#4A3A10;color:#FFD866}
+.banner.flood{display:block;background:#5A1D20;color:#FFB3B5}
+.mapwrap{padding:12px 16px 4px}
+.mapwrap svg{width:100%;height:auto;display:block}
+.stepbox{padding:12px 18px 20px;min-height:200px}
+.stepbox h2{font-size:19px;margin:2px 0 6px;font-weight:700;letter-spacing:-.01em}
+.stepbox p{margin:4px 0;color:#C7CED5;max-width:64ch}
+.stepbox .hint{font-size:13px;color:var(--smuted)}
+.vehgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:12px 0}
+.veh{background:var(--screen2);border:1px solid #3E4650;color:var(--sink);border-radius:10px;padding:10px;text-align:left;cursor:pointer;font:inherit;display:flex;flex-direction:column;gap:5px}
+.veh:hover:not(:disabled){border-color:var(--paint)}
+.veh:disabled{opacity:.5;cursor:not-allowed}
+.vmeta{font-size:12.5px;color:var(--smuted)}
+.vbadge{font-size:12px;color:var(--paint);min-height:1em}
+.plate{display:inline-block;background:#FBFBF8;color:#111418;border:2px solid #111418;border-radius:5px;padding:1px 8px;font-weight:700;letter-spacing:.04em;font-size:15px;width:max-content}
+.plate.big{font-size:30px;padding:4px 18px;border-width:3px;position:relative;overflow:hidden;margin:8px 0 10px}
+.plate.big.scan::after{content:"";position:absolute;left:0;right:0;height:30%;top:-30%;background:linear-gradient(transparent,rgba(59,123,240,.45),transparent);animation:scan 1.1s linear infinite}
+@keyframes scan{to{top:100%}}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+input,select{font:inherit;border-radius:8px;padding:8px 10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);min-width:0}
+.screen input{background:#1B2026;border-color:#46505A;color:var(--sink)}
+.btn{font:inherit;font-weight:600;border-radius:9px;padding:9px 15px;cursor:pointer;border:1px solid var(--line);background:var(--chip);color:var(--ink)}
+.screen .btn{background:#39414A;border-color:#4A535D;color:var(--sink)}
+.btn.primary,.screen .btn.primary{background:var(--paint);border-color:var(--paint);color:#1E1A0C}
+.btn.small{padding:4px 10px;font-size:13px;font-weight:500}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn:focus-visible,.veh:focus-visible,input:focus-visible,select:focus-visible,.switch:focus-visible{outline:3px solid var(--route);outline-offset:2px}
+.frames{list-style:none;padding:0;margin:6px 0;font-size:13.5px;display:grid;gap:3px}
+.frames li{color:var(--smuted)}
+.frames li.ok b{color:#9FE0B8}
+.frames li.bad b{color:#F2A7A9;text-decoration:line-through}
+.frames li.hit b{color:var(--paint)}
+.why{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:10px 0;font-size:14.5px}
+.why dt{color:var(--smuted)}
+.why dd{margin:0}
+.msg{border-left:4px solid var(--stop);padding:6px 12px;margin:10px 0;background:#3A2629;border-radius:0 8px 8px 0}
+.msg.ok{border-color:var(--go);background:#203328}
+
+/* 관리자 화면 */
+.side{display:grid;gap:14px}
+.sidehead{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.sidehead h2{font-size:17px;margin:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.card h3{font-size:15px;margin:0 0 8px;font-weight:700}
+.card p{margin:4px 0;font-size:14px}
+.muted{color:var(--muted)}
+.switch{display:flex;align-items:center;gap:10px;background:none;border:0;color:var(--ink);font:inherit;cursor:pointer;padding:0;text-align:left}
+.track{width:46px;height:26px;border-radius:13px;background:var(--off);position:relative;flex:none;transition:background .2s}
+.track::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .2s}
+.switch[aria-checked="true"] .track{background:var(--go)}
+.switch[aria-checked="true"] .track::after{left:23px}
+.pending{border:2px solid var(--paint)}
+.counts{display:flex;gap:16px;font-size:14px;margin-bottom:8px;flex-wrap:wrap}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--muted);font-weight:500}
+.water-top{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.wval{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}
+.stage{font-weight:700;padding:2px 9px;border-radius:6px;font-size:13.5px}
+.stage.normal{background:#D8EFE1;color:#14663A}
+.stage.risk{background:#FBEBC0;color:#7A5300}
+.stage.flood{background:#F8D4D5;color:#8E1C21}
+canvas{width:100%;height:150px;display:block;margin:8px 0;border-radius:8px;background:var(--chip)}
+.seg{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.seg .btn[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.log{list-style:none;margin:0;padding:0;font-size:13px;max-height:220px;overflow-y:auto;display:grid;gap:3px}
+.log li span{color:var(--muted);margin-right:6px;font-variant-numeric:tabular-nums}
+.log li em{font-style:normal;font-weight:600;margin-right:6px}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em;background:var(--chip);padding:0 4px;border-radius:4px}
+.screen code{background:#1B2026;color:var(--paint)}
+.formgrid{display:grid;grid-template-columns:1fr 1fr 90px auto;gap:6px;margin-top:8px}
+@media (max-width:520px){.formgrid{grid-template-columns:1fr 1fr}}
+@media (prefers-reduced-motion:reduce){.plate.big.scan::after{animation:none}.route{animation:none!important}.track,.track::after{transition:none}}
+.route{animation:flow 1s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-24}}
+</style>
+</head>
+<body>
+<header>
+  <h1>AI 주차 안내 시스템 · 운전자 체험</h1>
+  <p>내 차를 골라 입구로 들어가 보세요. 카메라가 번호판을 읽고, 차 크기에 맞는 칸을 배정해 길을 안내합니다. 오른쪽은 같은 시스템의 관리자 화면입니다.</p>
+</header>
+
+<main class="app">
+  <section class="dash" aria-label="차량 내비 화면">
+    <div class="screen">
+      <div class="topbar"><span>차량 내비 · <b id="tbPlate">차량 미선택</b></span><span id="tbClock">지하 1층 · 110동 출입구 구역</span></div>
+      <ol class="steps" id="steps"></ol>
+      <div class="banner" id="banner" role="status"></div>
+      <div class="mapwrap" id="map"></div>
+      <div class="stepbox" id="stepbox" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <aside class="side" aria-label="관리자 화면">
+    <div class="sidehead">
+      <h2>관리자 화면</h2>
+      <button class="btn small" data-act="resetAll">처음 상태로 초기화</button>
+    </div>
+
+    <div class="card" id="modeBox"></div>
+    <div class="card" id="pendingBox"></div>
+
+    <div class="card">
+      <h3>수위 센서 · 침수 알림</h3>
+      <div class="water-top">
+        <span class="wval" id="wVal">0</span>
+        <span class="stage normal" id="wStage">정상</span>
+        <span class="muted" style="font-size:13px" id="wClock"></span>
+      </div>
+      <p id="wPred" class="muted"></p>
+      <canvas id="wChart" aria-label="최근 10분 수위와 5분 뒤 예측"></canvas>
+      <p class="muted" style="font-size:12.5px">회색 선: 최근 10분 수위 · 점선: 5분 뒤 예측 · 빨간 선: 침수 기준 570</p>
+      <p style="margin-top:10px;font-weight:600;font-size:14px">날씨 바꾸기</p>
+      <div class="seg" id="weather">
+        <button class="btn small" data-rain="dry" aria-pressed="true">맑음</button>
+        <button class="btn small" data-rain="light" aria-pressed="false">보슬비</button>
+        <button class="btn small" data-rain="heavy" aria-pressed="false">폭우</button>
+        <button class="btn small" data-rain="shower" aria-pressed="false">소나기(8분)</button>
+      </div>
+      <p style="margin-top:10px;font-weight:600;font-size:14px">시간 흐름</p>
+      <div class="seg" id="speed">
+        <button class="btn small" data-speed="1" aria-pressed="false">실제 속도</button>
+        <button class="btn small" data-speed="10" aria-pressed="true">10배</button>
+        <button class="btn small" data-speed="30" aria-pressed="false">30배</button>
+      </div>
+      <p class="muted" style="font-size:13px;margin-top:8px">ESP32 구조 로봇 알림: <span id="esp">아직 보내지 않음</span></p>
+    </div>
+
+    <div class="card" id="statusBox"></div>
+
+    <div class="card">
+      <h3>등록 차량</h3>
+      <div class="tbl" id="vehBox"></div>
+      <p style="margin-top:12px;font-weight:600;font-size:14px">새 차량 등록</p>
+      <div class="formgrid">
+        <input id="nPlate" placeholder="예: 33나1234" aria-label="차량번호">
+        <select id="nKind" aria-label="차량 종류">
+          <option>일반 차량</option><option>경차</option><option value="">(비워 두기)</option>
+        </select>
+        <input id="nWidth" type="number" placeholder="너비 mm" aria-label="너비(mm)">
+        <button class="btn small" data-act="addVeh">등록</button>
+      </div>
+      <p class="muted" style="font-size:12.5px;margin-top:6px" id="nMsg">차종을 비우거나 너비를 0으로 넣으면 배정이 거부되는 경우를 볼 수 있습니다.</p>
+    </div>
+
+    <div class="card">
+      <h3>시스템 기록</h3>
+      <ul class="log" id="logBox"></ul>
+    </div>
+  </aside>
+</main>
+
+<script>
+/* ===== 설정값 (문서 기준) ===== */
+const WIDTH_LIMIT = 1900;
+const FLOOD_LIMIT = 570;
+const PREDICT_MIN = 5;
+const MIN_CONF = 0.3;
+const CONFIRM_COUNT = 2;
+const COEF = {cur:-0.061, s2:5.851, s5:-4.315, acc:-1.990, b:23.4};
+const PLATE_RE = /^\d{2,3}[가-힣]\d{4}$/;
+const TYPE_NAME = {B:'대형', S:'소형', K:'경차'};
+const PREPARKED = {C1:'12사3456'};
+
+const BASE_VEHICLES = [
+  {plate:'46수7531', kind:'일반 차량', width:1800},
+  {plate:'012바8126', kind:'일반 차량', width:2000},
+  {plate:'18자7315', kind:'경차', width:1500},
+  {plate:'458라9263', kind:'일반 차량', width:2000},
+  {plate:'12사3456', kind:'일반 차량', width:2100}
+];
+const spaces = [
+  {id:'A1',type:'B'},{id:'A2',type:'B'},{id:'A3',type:'S'},{id:'B1',type:'K'},{id:'C1',type:'B'},
+  {id:'C2',type:'B'},{id:'C3',type:'S'},{id:'C4',type:'B'},{id:'D1',type:'K'}
+];
+
+let vehicles, state, assignments, autoMode, pending, drv, logs = [], animId = null;
+
+const $ = s => document.querySelector(s);
+const norm = p => String(p || '').replace(/[\s\-_]/g, '').toUpperCase();
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmtPlate = p => { const m = String(p).match(/^(.*?)(\d{4})$/); return m ? `${m[1]} ${m[2]}` : p; };
+const findVeh = p => vehicles.find(v => v.plate === norm(p));
+
+function classify(v){
+  if (!v || !v.kind || !(Number(v.width) > 0)) return null;
+  if (v.kind.includes('경차')) return 'K';
+  return Number(v.width) >= WIDTH_LIMIT ? 'B' : 'S';
+}
+
+function log(tag, msg){
+  const d = new Date();
+  const t = d.toTimeString().slice(0,8);
+  logs.unshift({t, tag, msg});
+  logs = logs.slice(0, 60);
+  renderLog();
+}
+
+function sendArduino(sid, v){ log('아두이노', `LED 보드(COM6)로 ${sid},${v} 전송 — ${v ? '점유(빨강)' : '빈자리(꺼짐)'}`); }
+
+/* ===== 서버 쪽 처리 (app.py와 같은 규칙) ===== */
+function initAll(){
+  vehicles = BASE_VEHICLES.map(v => ({...v}));
+  state = {}; assignments = {};
+  spaces.forEach(s => state[s.id] = {status:'free', plate:null});
+  for (const [sid, p] of Object.entries(PREPARKED)){ state[sid] = {status:'occupied', plate:p}; assignments[p] = sid; }
+  autoMode = false; pending = null;
+  resetDriver();
+}
+function resetDriver(note){
+  if (animId) cancelAnimationFrame(animId);
+  animId = null;
+  drv = {step:1, plate:null, read:null, frames:[], phase:null, msg:null, res:null, space:null, pos:null, moving:false, arrived:false, note:note || null};
+}
+
+function assign(plate){
+  plate = norm(plate);
+  if (assignments[plate]) return {ok:true, space:assignments[plate], reguide:true};
+  const v = findVeh(plate);
+  if (!v) return {ok:false, code:404, msg:'등록되지 않은 차량입니다.'};
+  const t = classify(v);
+  if (!t) return {ok:false, code:400, msg:'차량 정보가 올바르지 않습니다. (차종이 비었거나 너비가 0 이하)'};
+  const taken = new Set(Object.values(assignments));
+  const cand = spaces.filter(s => s.type === t && state[s.id].status === 'free' && !taken.has(s.id));
+  if (!cand.length) return {ok:false, code:400, msg:`${t}(${TYPE_NAME[t]}) 유형의 빈 주차 공간이 없습니다.`};
+  const s = cand[Math.floor(Math.random() * cand.length)];
+  state[s.id] = {status:'assigned', plate};
+  assignments[plate] = s.id;
+  return {ok:true, space:s.id, type:t, cands:cand.map(c => c.id)};
+}
+function complete(plate){
+  const sid = assignments[plate];
+  if (!sid) return false;
+  const was = state[sid].status;
+  state[sid] = {status:'occupied', plate};
+  log('주차 완료', `${plate} → ${sid}`);
+  if (was !== 'occupied') sendArduino(sid, 1);
+  return true;
+}
+function exitCar(plate){
+  const sid = assignments[plate];
+  if (!sid){ log('출차', `${plate}: 기록이 없어 거부 (404)`); return false; }
+  const was = state[sid].status;
+  state[sid] = {status:'free', plate:null};
+  delete assignments[plate];
+  log('출차', `${plate} → ${sid} 비움`);
+  if (was === 'occupied') sendArduino(sid, 0);
+  else log('아두이노', `${sid}는 주차 완료 전이라 점유 상태가 바뀌지 않아 전송하지 않음`);
+  return true;
+}
+
+/* ===== 도면 좌표 ===== */
+const TOP = [['B',105],['P',55],['B',95],['S',70],['K',70],['B',95]];
+const BOT = [['B',75],['S',75],['B',95],['P',55],['K',80]];
+const X0 = 18, TOP_Y = 24, ROW_H = 150, AISLE_Y = 225, BOT_Y = 276;
+const slots = [], pillars = [];
+(function build(){
+  let x = X0;
+  TOP.forEach(([t,w]) => { if (t === 'P') pillars.push({x, y:TOP_Y, w, h:ROW_H}); else slots.push({x, y:TOP_Y, w, h:ROW_H, row:'top'}); x += w; });
+  x = X0;
+  BOT.forEach(([t,w]) => { if (t === 'P') pillars.push({x, y:BOT_Y, w, h:ROW_H}); else slots.push({x, y:BOT_Y, w, h:ROW_H, row:'bot'}); x += w; });
+})();
+const slotOf = sid => slots[spaces.findIndex(s => s.id === sid)];
+const START = {x:26, y:AISLE_Y, a:90};
+function frontPt(s){ return {x:s.x + s.w/2, y: s.row === 'top' ? TOP_Y + ROW_H + 20 : BOT_Y - 20}; }
+function centerPt(s){ return {x:s.x + s.w/2, y:s.y + s.h/2}; }
+function routeTo(sid){ const s = slotOf(sid), f = frontPt(s); return [{x:START.x, y:AISLE_Y}, {x:f.x, y:AISLE_Y}, f]; }
+
+function carShape(v, fill){
+  const wmm = v && Number(v.width) > 0 ? Number(v.width) : 1800;
+  const w = Math.max(17, Math.min(29, wmm / 1900 * 24));
+  const L = v && v.kind && v.kind.includes('경차') ? 38 : 46;
+  return `<rect x="${-w/2}" y="${-L/2}" width="${w}" height="${L}" rx="6" fill="${fill}" stroke="rgba(0,0,0,.45)"/>
+    <rect x="${-w/2+3}" y="${-L/2+8}" width="${w-6}" height="9" rx="2" fill="rgba(15,20,26,.6)"/>
+    <rect x="${-w/2+3}" y="${L/2-11}" width="${w-6}" height="6" rx="2" fill="rgba(15,20,26,.45)"/>
+    <rect x="${-w/2+2}" y="${-L/2+1}" width="4" height="3" rx="1" fill="#FFF6C8"/><rect x="${w/2-6}" y="${-L/2+1}" width="4" height="3" rx="1" fill="#FFF6C8"/>`;
+}
+
+function mapSVG(){
+  const routeOn = drv.space && (drv.step === 3 || drv.step === 4) && !drv.arrived;
+  let h = `<svg viewBox="0 0 526 450" role="img" aria-label="주차장 확대 도면">
+  <defs>
+    <pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="#3A424B"/><line x1="0" y1="0" x2="0" y2="8" stroke="#4E5761" stroke-width="3"/></pattern>
+    <marker id="arr" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#3B7BF0"/></marker>
+    <filter id="glow" x="-1" y="-1" width="3" height="3"><feGaussianBlur stdDeviation="2.5"/></filter>
+  </defs>
+  <rect x="4" y="10" width="518" height="428" rx="8" fill="#2B3138" stroke="#3E4650"/>
+  <rect x="${X0 + 380}" y="${BOT_Y}" width="${526 - 4 - X0 - 380 - 4}" height="${ROW_H}" fill="url(#hatch)" opacity=".7"/>
+  <text x="${X0 + 380 + 58}" y="${BOT_Y + 80}" fill="#8E98A2" font-size="12" text-anchor="middle">계단 · 벽</text>
+  <rect x="0" y="${AISLE_Y - 34}" width="10" height="68" fill="#242A31"/>
+  <text x="14" y="${AISLE_Y - 40}" fill="#A3ADB6" font-size="11">입구</text>
+  <circle cx="44" cy="${AISLE_Y - 42}" r="5" fill="#A3ADB6"/><rect x="40" y="${AISLE_Y - 47}" width="14" height="10" rx="2" fill="#A3ADB6"/>
+  <line x1="40" y1="${AISLE_Y}" x2="510" y2="${AISLE_Y}" stroke="rgba(255,255,255,.14)" stroke-width="2" stroke-dasharray="14 12"/>`;
+
+  if (drv.step === 2 && drv.phase === 'scan'){
+    h += `<polygon points="47,${AISLE_Y - 40} ${START.x - 6},${AISLE_Y - 18} ${START.x + 22},${AISLE_Y - 18}" fill="rgba(59,123,240,.35)"/>`;
+  }
+  pillars.forEach(p => { h += `<rect x="${p.x + 6}" y="${p.y + 6}" width="${p.w - 12}" height="${p.h - 12}" fill="url(#hatch)" rx="3"/><text x="${p.x + p.w/2}" y="${p.y + p.h/2 + 4}" fill="#8E98A2" font-size="11" text-anchor="middle">기둥</text>`; });
+
+  slots.forEach((s, i) => {
+    const sp = spaces[i]; if (!sp) return;
+    const st = state[sp.id];
+    const cur = drv.space === sp.id && drv.step >= 3;
+    h += `<rect x="${s.x + 2}" y="${s.y + 2}" width="${s.w - 4}" height="${s.h - 4}" fill="${cur ? 'rgba(59,123,240,.30)' : 'transparent'}" stroke="${cur ? '#6FA0FF' : '#F0BE2C'}" stroke-width="${cur ? 3 : 2}"/>`;
+    const ty = s.row === 'top' ? s.y + 36 : s.y + s.h - 40;
+    h += `<text x="${s.x + s.w/2}" y="${ty}" fill="#DCE2E7" font-size="15" font-weight="700" text-anchor="middle">${TYPE_NAME[sp.type] || sp.type}</text>
+          <text x="${s.x + s.w/2}" y="${ty + 17}" fill="#9AA4AD" font-size="12" text-anchor="middle">${sp.id}</text>`;
+    const ly = s.row === 'top' ? s.y + s.h - 14 : s.y + 14;
+    const col = st.status === 'occupied' ? '#E5484D' : st.status === 'assigned' ? '#2FBF71' : '#5E6871';
+    if (st.status !== 'free') h += `<circle cx="${s.x + s.w - 14}" cy="${ly}" r="8" fill="${col}" filter="url(#glow)"/>`;
+    h += `<circle cx="${s.x + s.w - 14}" cy="${ly}" r="5.5" fill="${col}" stroke="#1E2329"/>`;
+    if (st.status === 'occupied' && !(drv.pos && st.plate === drv.read)){
+      const c = centerPt(s);
+      const rot = s.row === 'top' ? 0 : 180;
+      h += `<g transform="translate(${c.x} ${c.y}) rotate(${rot})">${carShape(findVeh(st.plate), '#8C969F')}</g>`;
+    }
+  });
+
+  if (routeOn){
+    const pts = routeTo(drv.space).map(p => `${p.x},${p.y}`).join(' ');
+    h += `<polyline points="${pts}" fill="none" stroke="#3B7BF0" stroke-width="5" stroke-linejoin="round" stroke-dasharray="14 10" class="route" marker-end="url(#arr)"/>`;
+  }
+  if (drv.pos){
+    const v = findVeh(drv.plate) || {width:1800, kind:'일반 차량'};
+    h += `<g id="car" transform="translate(${drv.pos.x} ${drv.pos.y}) rotate(${drv.pos.a})">${carShape(v, '#F0BE2C')}</g>`;
+  }
+  return h + `</svg>`;
+}
+
+function setCar(){
+  const g = document.getElementById('car');
+  if (g && drv.pos) g.setAttribute('transform', `translate(${drv.pos.x} ${drv.pos.y}) rotate(${drv.pos.a})`);
+}
+function animate(points, done){
+  if (animId) cancelAnimationFrame(animId);
+  const segs = [];
+  let total = 0;
+  for (let i = 1; i < points.length; i++){
+    const a = points[i-1], b = points[i];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len > 0){ segs.push({a, b, len, ang: Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI + 90}); total += len; }
+  }
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const speed = 150;
+  let t0 = null;
+  function frame(ts){
+    if (t0 === null) t0 = ts;
+    let d = reduce ? total : (ts - t0) / 1000 * speed;
+    if (d >= total){
+      const last = segs[segs.length - 1];
+      drv.pos = {x:last.b.x, y:last.b.y, a:last.ang};
+      setCar(); animId = null; done && done(); return;
+    }
+    for (const s of segs){
+      if (d <= s.len){ const r = d / s.len; drv.pos = {x:s.a.x + (s.b.x - s.a.x) * r, y:s.a.y + (s.b.y - s.a.y) * r, a:s.ang}; break; }
+      d -= s.len;
+    }
+    setCar();
+    animId = requestAnimationFrame(frame);
+  }
+  if (!segs.length){ done && done(); return; }
+  animId = requestAnimationFrame(frame);
+}
+
+/* ===== 번호판 인식 흉내 (final.py 규칙) ===== */
+const LOOK = {'0':'8','8':'3','3':'8','1':'7','7':'1','5':'6','6':'5','2':'7','4':'9','9':'4'};
+function simulateRead(plate, n){
+  let text = plate, conf = 0.6 + Math.random() * 0.35, note = '';
+  if (n <= 4 && Math.random() < 0.55){
+    const r = Math.random();
+    if (r < 0.34){ conf = 0.1 + Math.random() * 0.18; }
+    else if (r < 0.67){ text = plate.replace(/[가-힣]/, ''); }
+    else {
+      const idx = [...plate].map((c,i) => /\d/.test(c) ? i : -1).filter(i => i >= 0);
+      const k = idx[Math.floor(Math.random() * idx.length)];
+      text = plate.slice(0,k) + (LOOK[plate[k]] || plate[k]) + plate.slice(k+1);
+    }
+  }
+  return {n, text, conf};
+}
+function startEntry(plate){
+  plate = norm(plate);
+  resetDriver();
+  drv.step = 2; drv.plate = plate; drv.phase = 'scan'; drv.pos = {...START};
+  log('카메라', `${fmtPlate(plate)} 차량이 입구에 도착`);
+  render();
+  let last = null, count = 0, n = 0;
+  const timer = setInterval(() => {
+    if (drv.plate !== plate || drv.phase !== 'scan'){ clearInterval(timer); return; }
+    n++;
+    const f = simulateRead(plate, n);
+    if (f.conf < MIN_CONF){ f.state = 'bad'; f.note = `신뢰도 ${MIN_CONF} 미만이라 버림`; }
+    else if (!PLATE_RE.test(f.text)){ f.state = 'bad'; f.note = '번호판 모양이 아님'; }
+    else {
+      if (f.text === last) count++; else { last = f.text; count = 1; }
+      f.state = 'ok'; f.note = `같은 번호 연속 ${count}회`;
+    }
+    drv.frames.push(f);
+    if (count >= CONFIRM_COUNT){ f.state = 'hit'; clearInterval(timer); confirmPlate(last); return; }
+    renderStep();
+  }, 480);
+}
+function confirmPlate(text){
+  drv.read = text;
+  log('카메라', `번호판 확정: ${text} (연속 ${CONFIRM_COUNT}회)`);
+  if (autoMode){
+    log('자동 배정', '관리자 없음 모드라 확정 즉시 배정');
+    doAssign(text);
+  } else {
+    pending = text; drv.phase = 'wait';
+    log('카메라', '관리자 화면 차량번호 칸에 전달, 확인 대기');
+    render();
+  }
+}
+function doAssign(text){
+  pending = null;
+  const res = assign(text);
+  drv.res = res;
+  if (res.ok){
+    drv.step = 3; drv.space = res.space; drv.phase = null; drv.arrived = false;
+    if (res.reguide) log('배정', `${text}는 이미 ${res.space}에 배정된 차량 → 기존 공간 다시 안내`);
+    else log('배정', `${text} → ${res.space} (${res.type} ${TYPE_NAME[res.type]}) · 후보 ${res.cands.join(', ')} 중 무작위`);
+  } else {
+    drv.phase = 'reject'; drv.msg = res.msg;
+    log('배정 거부', `${text}: ${res.msg} (${res.code})`);
+  }
+  render();
+}
+
+/* ===== 화면 그리기 ===== */
+const STEP_NAMES = ['차량 선택','번호판 인식','공간 배정','이동','주차 완료'];
+function renderSteps(){
+  $('#steps').innerHTML = STEP_NAMES.map((n,i) => {
+    const k = i + 1, cls = k < drv.step ? 'done' : k === drv.step ? 'now' : '';
+    return `<li class="${cls}" ${k === drv.step ? 'aria-current="step"' : ''}>${k}. ${n}</li>`;
+  }).join('');
+  $('#tbPlate').textContent = drv.plate ? fmtPlate(drv.plate) : '차량 미선택';
+}
+function renderStep(){
+  const b = $('#stepbox');
+  let h = '';
+  if (drv.step === 1){
+    h = `<h2>체험할 차를 고르세요</h2>
+      <p>고른 차가 입구 카메라 앞에 섭니다. 이미 주차한 차는 출차하기 전까지 다시 고를 수 없습니다.</p>
+      ${drv.note ? `<div class="msg ok">${esc(drv.note)}</div>` : ''}
+      <div class="vehgrid">${vehicles.map(v => {
+        const sid = assignments[v.plate], st = sid ? state[sid].status : null;
+        return `<button class="veh" data-act="enter" data-plate="${esc(v.plate)}" ${st === 'occupied' ? 'disabled' : ''}>
+          <span class="plate">${esc(fmtPlate(v.plate))}</span>
+          <span class="vmeta">${esc(v.kind || '차종 없음')} · 너비 ${esc(v.width || 0)}mm</span>
+          <span class="vbadge">${st === 'occupied' ? `${sid}에 주차 중` : st === 'assigned' ? `${sid} 배정됨 · 이동 전` : ''}</span></button>`;
+      }).join('')}</div>
+      <div class="row"><input id="freePlate" placeholder="번호판 직접 입력 (예: 99하1234)" aria-label="번호판 직접 입력" style="flex:1 1 200px">
+      <button class="btn primary" data-act="enterFree">이 번호로 진입하기</button></div>
+      <p class="hint" id="freeErr">등록되지 않은 번호를 넣으면 배정이 거부되는 과정을 볼 수 있습니다.</p>`;
+  }
+  else if (drv.step === 2){
+    const fr = drv.frames.slice(-6);
+    h = `<h2>${drv.phase === 'scan' ? '입구 카메라가 번호판을 읽고 있습니다' : '번호판 인식 결과'}</h2>
+      <div class="plate big ${drv.phase === 'scan' ? 'scan' : ''}">${esc(fmtPlate(drv.plate))}</div>
+      <ol class="frames">${fr.map(f => `<li class="${f.state}">프레임 ${f.n}: <b>${esc(f.text)}</b> · 신뢰도 ${f.conf.toFixed(2)} · ${f.note}</li>`).join('')}</ol>`;
+    if (drv.phase === 'scan') h += `<p class="hint">같은 번호가 ${CONFIRM_COUNT}번 연속 읽혀야 확정합니다. 흐리게 읽히거나 모양이 틀린 글자는 버립니다.</p>`;
+    if (drv.read && drv.read !== drv.plate) h += `<div class="msg">카메라가 실제 번호 ${esc(drv.plate)}를 ${esc(drv.read)}로 잘못 읽었습니다. 이런 오인식을 막으려고 관리자 확인 단계가 있습니다.</div>`;
+    if (drv.phase === 'wait') h += `<div class="msg ok">${esc(drv.read)}로 확정했습니다. 관리자가 번호를 확인하고 있습니다.</div>
+      <p>관리자 화면의 카메라 인식 알림에서 <b>[배정]</b>이나 <b>[무시]</b>를 눌러 보세요.</p>
+      <div class="row"><button class="btn" data-act="toAdmin">관리자 화면으로 이동</button></div>`;
+    if (drv.phase === 'reject') h += `<div class="msg">${esc(drv.msg)}</div><div class="row"><button class="btn primary" data-act="restart">처음으로</button></div>`;
+    if (drv.phase === 'ignored') h += `<div class="msg">관리자가 인식 결과를 무시했습니다. 다시 진입해 주세요.</div><div class="row"><button class="btn primary" data-act="retry">다시 진입하기</button><button class="btn" data-act="restart">다른 차 고르기</button></div>`;
+  }
+  else if (drv.step === 3){
+    const v = findVeh(drv.read), t = classify(v);
+    const widthTxt = t === 'K' ? `${v.width}mm (경차는 너비와 관계없이 경차 칸)` : `${v.width}mm ${Number(v.width) >= WIDTH_LIMIT ? '≥' : '<'} 기준 ${WIDTH_LIMIT}mm`;
+    h = `<h2>${drv.space} 칸이 배정되었습니다</h2>
+      ${drv.res.reguide ? `<div class="msg ok">이미 배정된 차량이라 새로 배정하지 않고 기존 공간을 다시 안내합니다.</div>` : ''}
+      <dl class="why">
+        <dt>인식 번호</dt><dd>${esc(drv.read)}</dd>
+        <dt>차종</dt><dd>${esc(v.kind)}</dd>
+        <dt>너비</dt><dd>${widthTxt}</dd>
+        <dt>필요한 칸</dt><dd>${TYPE_NAME[t]} (${t})</dd>
+        ${drv.res.cands ? `<dt>고른 방법</dt><dd>비어 있는 ${t} 칸 ${drv.res.cands.join(', ')} 중 무작위</dd>` : ''}
+      </dl>
+      <p class="hint">도면의 ${drv.space} 칸 LED가 초록색(배정됨)으로 바뀌었습니다. 다른 차는 이 칸을 배정받을 수 없습니다.</p>
+      <div class="row"><button class="btn primary" data-act="go">출발하기</button><button class="btn" data-act="restart">안내 중단하고 처음으로</button></div>`;
+  }
+  else if (drv.step === 4){
+    h = drv.arrived
+      ? `<h2>${drv.space} 앞에 도착했습니다</h2><p>주차를 마쳤으면 아래 버튼을 누르세요. 시간이 지나도 저절로 주차 완료가 되지는 않습니다.</p>
+         <div class="row"><button class="btn primary" data-act="complete">주차 완료</button></div>`
+      : `<h2>${drv.space}(으)로 이동 중</h2><p>파란 경로를 따라 가운데 통로로 들어갑니다.</p>`;
+  }
+  else if (drv.step === 5){
+    h = `<h2>주차를 완료했습니다</h2>
+      <p>안내를 종료합니다. LED 보드로 <code>${drv.space},1</code> 신호를 보내 ${drv.space} 칸 불이 빨간색으로 켜졌습니다.</p>
+      <p class="hint">빨간색은 운전자가 버튼을 눌렀다는 시스템상의 상태입니다. 실제 주차 센서는 없습니다.</p>
+      <div class="row"><button class="btn primary" data-act="exit">출차하기</button><button class="btn" data-act="restart">다른 차로 체험하기</button></div>`;
+  }
+  b.innerHTML = h;
+}
+
+function renderAdmin(){
+  $('#modeBox').innerHTML = `<button class="switch" role="switch" aria-checked="${!autoMode}" data-act="mode">
+      <span class="track"></span><span><b>${autoMode ? '관리자 없음 · 자동 배정' : '관리자 있음 · 수동 배정'}</b><br>
+      <span class="muted" style="font-size:13px">${autoMode ? '번호가 확정되면 확인 없이 바로 배정합니다.' : '번호가 확정되면 관리자가 확인한 뒤 배정합니다.'}</span></span></button>`;
+
+  const pb = $('#pendingBox');
+  if (pending){
+    const v = findVeh(pending), sid = assignments[pending], t = classify(v);
+    const desc = !v ? '미등록 차량' : sid ? `이미 ${sid}에 배정된 차량` : t ? `등록 차량 · ${v.kind} · ${v.width}mm → ${TYPE_NAME[t]}(${t})` : '등록 차량 · 차량 정보 오류';
+    pb.className = 'card pending';
+    pb.innerHTML = `<h3>카메라 인식 알림</h3><p><span class="plate">${esc(fmtPlate(pending))}</span></p><p>${desc}</p>
+      <div class="row"><button class="btn primary" data-act="adminAssign">배정</button><button class="btn" data-act="adminIgnore">무시</button></div>`;
+  } else {
+    pb.className = 'card';
+    pb.innerHTML = `<h3>카메라 인식 알림</h3><p class="muted">${autoMode ? '자동 배정 모드입니다. 인식된 번호는 바로 배정됩니다.' : '새로 인식된 번호판이 없습니다.'}</p>`;
+  }
+
+  const c = {free:0, assigned:0, occupied:0};
+  spaces.forEach(s => c[state[s.id].status]++);
+  const lbl = {free:'빈자리', assigned:'배정됨', occupied:'주차 완료'};
+  const col = {free:'var(--off)', assigned:'var(--go)', occupied:'var(--stop)'};
+  $('#statusBox').innerHTML = `<h3>주차 현황</h3>
+    <div class="counts">${Object.keys(c).map(k => `<span><i class="dot" style="background:${col[k]}"></i>${lbl[k]} ${c[k]}</span>`).join('')}<span class="muted">너비 기준 ${WIDTH_LIMIT}mm</span></div>
+    <div class="tbl"><table><thead><tr><th>칸</th><th>유형</th><th>상태</th><th>차량</th><th></th></tr></thead><tbody>
+    ${spaces.map(s => { const st = state[s.id]; return `<tr><td>${s.id}</td><td>${TYPE_NAME[s.type]}</td><td><i class="dot" style="background:${col[st.status]}"></i>${lbl[st.status]}</td><td>${st.plate ? esc(st.plate) : ''}</td><td>${st.plate ? `<button class="btn small" data-act="adminExit" data-plate="${esc(st.plate)}">출차</button>` : ''}</td></tr>`; }).join('')}
+    </tbody></table></div>`;
+
+  $('#vehBox').innerHTML = `<table><thead><tr><th>차량번호</th><th>차종</th><th>너비</th><th>필요 칸</th><th>배정</th></tr></thead><tbody>
+    ${vehicles.map(v => { const t = classify(v); return `<tr><td>${esc(v.plate)}</td><td>${esc(v.kind || '—')}</td><td>${esc(v.width)}</td><td>${t ? TYPE_NAME[t] : '정보 오류'}</td><td>${assignments[v.plate] || ''}</td></tr>`; }).join('')}
+    </tbody></table>`;
+}
+function renderLog(){
+  $('#logBox').innerHTML = logs.map(l => `<li><span>${l.t}</span><em>${esc(l.tag)}</em>${esc(l.msg)}</li>`).join('');
+}
+function render(){
+  renderSteps();
+  $('#map').innerHTML = mapSVG();
+  renderStep();
+  renderAdmin();
+}
+
+/* ===== 버튼 처리 ===== */
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  const act = el.dataset.act;
+  if (act === 'enter') startEntry(el.dataset.plate);
+  else if (act === 'enterFree'){
+    const p = norm($('#freePlate').value);
+    if (!PLATE_RE.test(p)){ $('#freeErr').textContent = '번호판 모양으로 입력하세요. 숫자 2~3자리, 한글 1자, 숫자 4자리 (예: 12가3456)'; return; }
+    const sid = assignments[p];
+    if (sid && state[sid].status === 'occupied'){ $('#freeErr').textContent = `${p}는 이미 ${sid}에 주차 중입니다. 관리자 화면에서 먼저 출차하세요.`; return; }
+    startEntry(p);
+  }
+  else if (act === 'toAdmin') $('#pendingBox').scrollIntoView({behavior:'smooth', block:'center'});
+  else if (act === 'restart'){ resetDriver(); render(); }
+  else if (act === 'retry'){ startEntry(drv.plate); }
+  else if (act === 'go'){
+    drv.step = 4; drv.arrived = false; render();
+    animate(routeTo(drv.space), () => { drv.arrived = true; render(); });
+  }
+  else if (act === 'complete'){
+    if (!complete(drv.read)) return;
+    drv.step = 5; render();
+    const s = slotOf(drv.space);
+    animate([{...drv.pos}, centerPt(s)], () => render());
+  }
+  else if (act === 'exit'){
+    const s = slotOf(drv.space), plate = drv.read;
+    exitCar(plate);
+    drv.step = 5; renderAdmin(); $('#map').innerHTML = mapSVG();
+    animate([centerPt(s), frontPt(s), {x:frontPt(s).x, y:AISLE_Y}, {x:-40, y:AISLE_Y}], () => { resetDriver(`${plate} 차량이 출차했습니다. 다른 차로 다시 체험해 보세요.`); render(); });
+  }
+  else if (act === 'mode'){ autoMode = !autoMode; log('모드', autoMode ? '관리자 없음 · 자동 배정으로 변경' : '관리자 있음 · 수동 배정으로 변경'); renderAdmin(); }
+  else if (act === 'adminAssign'){ if (pending) doAssign(pending); }
+  else if (act === 'adminIgnore'){
+    log('카메라', `관리자가 ${pending} 인식 결과를 무시`);
+    pending = null;
+    if (drv.step === 2 && drv.phase === 'wait'){ drv.phase = 'ignored'; }
+    render();
+  }
+  else if (act === 'adminExit'){
+    const p = el.dataset.plate;
+    exitCar(p);
+    if (drv.read === p) resetDriver(`관리자가 ${p} 차량을 출차 처리했습니다.`);
+    render();
+  }
+  else if (act === 'addVeh'){
+    const p = norm($('#nPlate').value), kind = $('#nKind').value, w = Number($('#nWidth').value) || 0;
+    const m = $('#nMsg');
+    if (!PLATE_RE.test(p)){ m.textContent = '번호판 모양으로 입력하세요. (예: 33나1234)'; return; }
+    if (findVeh(p)){ m.textContent = `${p}는 이미 등록되어 있습니다.`; return; }
+    vehicles.push({plate:p, kind, width:w});
+    const t = classify({kind, width:w});
+    m.textContent = `${p}를 등록했습니다. ${t ? `필요한 칸: ${TYPE_NAME[t]}(${t})` : '차량 정보가 올바르지 않아 배정이 거부됩니다.'}`;
+    log('차량 등록', `${p} · ${kind || '차종 없음'} · ${w}mm`);
+    $('#nPlate').value = ''; $('#nWidth').value = '';
+    render();
+  }
+  else if (act === 'resetAll'){
+    initAll(); logs = []; log('시스템', '처음 상태로 초기화 (C1에 12사3456 미리 주차)'); render();
+  }
+});
+
+/* ===== 수위 센서 · 침수 예측 ===== */
+const DRAIN = 0.004;
+const W = {t:0, level:0, rain:0, hist:[], stage:'normal', pred:null, method:'', speed:10, showerEnd:null, acc:0};
+for (let i = 0; i < 300; i++) W.hist.push(0);
+W.t = 300;
+
+function slopePerMin(arr){
+  const n = arr.length; if (n < 2) return 0;
+  const mx = (n - 1) / 2; let my = 0; arr.forEach(v => my += v); my /= n;
+  let num = 0, den = 0;
+  arr.forEach((v,i) => { num += (i - mx) * (v - my); den += (i - mx) ** 2; });
+  return den ? num / den * 60 : 0;
+}
+const clamp = v => Math.max(0, Math.min(1023, v));
+function predict(){
+  const h = W.hist, n = h.length, cur = h[n-1];
+  if (n >= 300){
+    const s2 = slopePerMin(h.slice(n-120)), s5 = slopePerMin(h.slice(n-300)), prev = slopePerMin(h.slice(n-240, n-120));
+    const acc = s2 - prev;
+    const rise = COEF.cur*cur + COEF.s2*s2 + COEF.s5*s5 + COEF.acc*acc + COEF.b;
+    return {pred: clamp(cur + rise), method:'선형회귀'};
+  }
+  if (n >= 30){
+    const s = Math.max(0, slopePerMin(h.slice(-Math.min(120, n))) / 60);
+    return {pred: clamp(cur + s * PREDICT_MIN * 60), method:'추세'};
+  }
+  return {pred:null, method:'데이터 모으는 중'};
+}
+function simStep(){
+  W.t++;
+  if (W.showerEnd !== null && W.t >= W.showerEnd){ W.rain = 0; W.showerEnd = null; setPressed('#weather', 'dry'); log('날씨', '소나기가 그쳤습니다'); }
+  W.level = Math.max(0, W.level + W.rain - DRAIN * W.level);
+  let v = W.level < 15 ? 0 : W.level + (Math.random() * 8 - 4);
+  if (Math.random() < 0.002) v += (Math.random() < .5 ? -1 : 1) * 60;
+  v = Math.round(clamp(v));
+  W.hist.push(v); if (W.hist.length > 900) W.hist.shift();
+  const p = predict(); W.pred = p.pred; W.method = p.method;
+  const stage = v >= FLOOD_LIMIT ? 'flood' : (W.pred !== null && W.pred >= FLOOD_LIMIT) ? 'risk' : 'normal';
+  if (stage !== W.stage){
+    log('수위', stage === 'flood' ? `침수 발생 (현재 ${v})` : stage === 'risk' ? `${PREDICT_MIN}분 내 침수 위험 (예측 ${Math.round(W.pred)})` : `정상으로 돌아옴 (현재 ${v})`);
+    if (stage === 'risk' || stage === 'flood'){
+      const ts = new Date().toTimeString().slice(0,8);
+      $('#esp').textContent = `${ts} /alert 전송 성공 (시뮬레이션)`;
+      log('ESP32', '구조 로봇에 침수 위험 신호 /alert 전송 (단계가 바뀐 순간 한 번)');
+    } else log('ESP32', '정상 복귀 신호는 보내지 않음 (구조 중 로봇이 멈추지 않도록)');
+    W.stage = stage;
+  }
+}
+function fmtSim(t){ const m = Math.floor(t / 60), s = t % 60; return `시뮬레이션 ${m}분 ${String(s).padStart(2,'0')}초`; }
+function updateWater(){
+  const cur = W.hist[W.hist.length - 1];
+  $('#wVal').textContent = cur;
+  const st = $('#wStage');
+  st.className = 'stage ' + W.stage;
+  st.textContent = W.stage === 'flood' ? '🚨 침수 발생' : W.stage === 'risk' ? `⚠ ${PREDICT_MIN}분 내 침수 위험` : '정상';
+  $('#wClock').textContent = fmtSim(W.t);
+  $('#wPred').textContent = W.pred === null ? '예측: 데이터 모으는 중' : `5분 뒤 예측 ${Math.round(W.pred)} · 예측 방법: ${W.method}${W.rain > 0 ? ` · 비가 계속 오면 약 ${Math.round(W.rain / DRAIN)}까지 차오름` : ''}`;
+  const bn = $('#banner');
+  bn.className = 'banner ' + (W.stage === 'normal' ? '' : W.stage);
+  bn.textContent = W.stage === 'flood' ? '🚨 지하주차장 침수 발생 · 차량을 지상으로 옮기세요' : W.stage === 'risk' ? `⚠ ${PREDICT_MIN}분 안에 침수될 위험이 있습니다 · 지하 주차를 피하세요` : '';
+  drawChart();
+}
+function drawChart(){
+  const cv = $('#wChart'), dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (!w) return;
+  if (cv.width !== Math.round(w * dpr)){ cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  const cs = getComputedStyle(document.documentElement);
+  const ink = cs.getPropertyValue('--muted').trim(), red = cs.getPropertyValue('--stop').trim(), blue = cs.getPropertyValue('--route').trim();
+  const pad = 6, span = 900, nowX = w * (600 / span);
+  const y = v => h - pad - (v / 1023) * (h - pad * 2);
+  ctx.strokeStyle = red; ctx.setLineDash([5,4]); ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(0, y(FLOOD_LIMIT)); ctx.lineTo(w, y(FLOOD_LIMIT)); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.strokeStyle = ink; ctx.globalAlpha = .35;
+  ctx.beginPath(); ctx.moveTo(nowX, 0); ctx.lineTo(nowX, h); ctx.stroke(); ctx.globalAlpha = 1;
+  const data = W.hist.slice(-600);
+  ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.beginPath();
+  data.forEach((v,i) => { const x = nowX - (data.length - 1 - i) * (nowX / 600); i ? ctx.lineTo(x, y(v)) : ctx.moveTo(x, y(v)); });
+  ctx.stroke();
+  if (W.pred !== null){
+    const cur = data[data.length - 1];
+    ctx.strokeStyle = blue; ctx.setLineDash([4,4]); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(nowX, y(cur)); ctx.lineTo(w - 8, y(W.pred)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = blue; ctx.beginPath(); ctx.arc(w - 8, y(W.pred), 4.5, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.fillStyle = ink; ctx.font = '11px "IBM Plex Sans KR", sans-serif';
+  ctx.fillText('10분 전', 4, h - 6); ctx.fillText('지금', nowX + 4, h - 6); ctx.fillText('+5분', w - 34, 12);
+}
+function setPressed(sel, key){
+  document.querySelectorAll(`${sel} .btn`).forEach(b => b.setAttribute('aria-pressed', String((b.dataset.rain || b.dataset.speed) === String(key))));
+}
+$('#weather').addEventListener('click', e => {
+  const b = e.target.closest('[data-rain]'); if (!b) return;
+  const k = b.dataset.rain;
+  W.showerEnd = null;
+  if (k === 'dry') W.rain = 0;
+  if (k === 'light') W.rain = 350 * DRAIN;
+  if (k === 'heavy') W.rain = 900 * DRAIN;
+  if (k === 'shower'){ W.rain = 900 * DRAIN; W.showerEnd = W.t + 8 * 60; }
+  setPressed('#weather', k);
+  log('날씨', `${b.textContent}${W.rain ? ` · 계속 오면 약 ${Math.round(W.rain / DRAIN)}까지 차오름` : ''}`);
+});
+$('#speed').addEventListener('click', e => {
+  const b = e.target.closest('[data-speed]'); if (!b) return;
+  W.speed = Number(b.dataset.speed); setPressed('#speed', W.speed);
+});
+setInterval(() => {
+  W.acc += W.speed * 0.25;
+  while (W.acc >= 1){ simStep(); W.acc -= 1; }
+  updateWater();
+}, 250);
+window.addEventListener('resize', drawChart);
+
+/* ===== 시작 ===== */
+initAll();
+log('시스템', '서버 시작 · C1에 12사3456 미리 주차 (시연용)');
+log('아두이노', 'LED 보드 연결 후 모든 칸 상태 한 번씩 전송');
+render();
+updateWater();
+</script>
+</body>
+</html>
